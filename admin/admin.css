@@ -15,6 +15,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -45,6 +49,148 @@ a {
 
 .admin-shell {
   min-height: 100svh;
+}
+
+.login-view {
+  min-height: 100svh;
+  display: grid;
+  grid-template-columns: minmax(360px, 1.1fr) minmax(360px, 0.9fr);
+}
+
+.login-media {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 100svh;
+  padding: clamp(24px, 5vw, 52px);
+  color: #fffaf2;
+  background:
+    linear-gradient(0deg, rgba(17, 21, 22, 0.64), rgba(17, 21, 22, 0.18)),
+    url("/assets/veloura-hero.png") center / cover;
+}
+
+.login-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.login-brand span {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid rgba(255, 250, 242, 0.32);
+  border-radius: 50%;
+  font-family: Georgia, serif;
+  font-size: 24px;
+}
+
+.login-media-copy {
+  max-width: 620px;
+}
+
+.login-media-copy p,
+.login-kicker {
+  margin: 0 0 12px;
+  color: var(--wine);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.login-media-copy p {
+  color: #ead1c8;
+}
+
+.login-media-copy h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(40px, 5vw, 68px);
+  font-weight: 520;
+  line-height: 1.05;
+}
+
+.login-access {
+  display: grid;
+  place-items: center;
+  padding: clamp(20px, 7vw, 84px);
+}
+
+.login-card {
+  display: grid;
+  gap: 18px;
+  width: min(430px, 100%);
+}
+
+.login-card h2 {
+  margin: -6px 0 10px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(36px, 4vw, 48px);
+  font-weight: 520;
+  line-height: 1.06;
+}
+
+.login-card label {
+  display: grid;
+  gap: 7px;
+}
+
+.login-card label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.login-card input {
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  outline: none;
+}
+
+.login-card input:focus {
+  border-color: var(--wine);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wine) 18%, transparent);
+}
+
+.login-card button {
+  min-height: 52px;
+  margin-top: 4px;
+  border: 1px solid var(--graphite);
+  border-radius: var(--radius);
+  background: var(--graphite);
+  color: #fffaf2;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.login-card button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.login-status {
+  min-height: 22px;
+  margin: 0;
+  color: var(--wine);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.login-site-link {
+  justify-self: start;
+  color: var(--muted);
+  font-weight: 760;
 }
 
 .admin-header {
@@ -87,7 +233,6 @@ a {
   gap: 8px;
 }
 
-.admin-header-actions input,
 .admin-header-actions button,
 .admin-header-actions a,
 .admin-tabs button,
@@ -98,11 +243,13 @@ a {
   border-radius: var(--radius);
 }
 
-.admin-header-actions input {
-  width: min(210px, 42vw);
-  padding: 10px 12px;
-  background: var(--surface);
-  color: var(--ink);
+.admin-user {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 760;
 }
 
 .admin-header-actions button,
@@ -407,6 +554,14 @@ a {
 }
 
 @media (max-width: 980px) {
+  .login-view {
+    grid-template-columns: 1fr;
+  }
+
+  .login-media {
+    min-height: clamp(260px, 38svh, 390px);
+  }
+
   .admin-layout,
   .collection-layout,
   .editor-form.wide,
@@ -425,6 +580,19 @@ a {
 }
 
 @media (max-width: 620px) {
+  .login-access {
+    padding: 28px 18px 40px;
+  }
+
+  .login-media {
+    min-height: 280px;
+    padding: 20px 18px;
+  }
+
+  .login-media-copy h1 {
+    font-size: 38px;
+  }
+
   .admin-header {
     align-items: flex-start;
     flex-direction: column;
@@ -435,7 +603,6 @@ a {
     width: 100%;
   }
 
-  .admin-header-actions input,
   .admin-header-actions button,
   .admin-header-actions a {
     width: 100%;

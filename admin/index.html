@@ -8,15 +8,46 @@
     <script defer src="/admin/admin.js"></script>
   </head>
   <body>
-    <div class="admin-shell">
+    <section class="login-view" data-login-view hidden>
+      <div class="login-media" aria-hidden="true">
+        <div class="login-brand">
+          <span>V</span>
+          <strong>Veloura Spaces</strong>
+        </div>
+        <div class="login-media-copy">
+          <p>Studio Administration</p>
+          <h1>Portfolio and consultation control.</h1>
+        </div>
+      </div>
+
+      <div class="login-access">
+        <form class="login-card" data-login-form>
+          <p class="login-kicker">Secure access</p>
+          <h2>Sign in to admin</h2>
+          <label>
+            <span>Email</span>
+            <input name="email" type="email" autocomplete="username" required />
+          </label>
+          <label>
+            <span>Password</span>
+            <input name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <p class="login-status" data-login-status role="alert"></p>
+          <button type="submit" data-login-submit>Sign In</button>
+          <a class="login-site-link" href="/">Return to website</a>
+        </form>
+      </div>
+    </section>
+
+    <div class="admin-shell" data-admin-shell hidden>
       <header class="admin-header">
         <a class="admin-brand" href="/">
           <span>V</span>
           <strong>Veloura Admin</strong>
         </a>
         <div class="admin-header-actions">
-          <input data-token-input type="password" placeholder="Admin token" autocomplete="off" />
-          <button type="button" data-save-token>Save Token</button>
+          <span class="admin-user" data-admin-user></span>
+          <button type="button" data-logout>Sign Out</button>
           <a href="/">View Site</a>
         </div>
       </header>

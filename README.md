@@ -37,6 +37,9 @@ If the server moves to another port, use that port instead. The admin panel can 
 
 ```text
 GET    /api/site
+POST   /api/admin/login
+GET    /api/admin/session
+POST   /api/admin/logout
 GET    /api/admin/data
 PUT    /api/admin/settings
 DELETE /api/admin/leads/:id
@@ -111,10 +114,20 @@ CLOUDINARY_FOLDER=veloura-spaces
 The Cloudinary API secret is used only on the server. Browser code never receives it.
 The Cloudinary API key must allow asset creation/upload operations. If its permissions do not include `create`, the admin uploader will display Cloudinary's permission error and no asset will be created. The Vercel-compatible admin upload limit is 3 MB per image.
 
-For production, set an admin token before starting the server:
+## Admin Authentication
 
-```bash
-ADMIN_TOKEN=your-secure-token npm run dev
+The admin interface uses email/password sign-in and an HTTP-only signed session cookie. Configure:
+
+```text
+ADMIN_EMAIL=admin@yourdomain.com
+ADMIN_PASSWORD_HASH=scrypt$generated-salt$generated-password-hash
+ADMIN_SESSION_SECRET=generate-a-long-random-session-secret
 ```
 
-The admin UI has a token input that stores the token locally in the browser and sends it with admin API requests.
+`ADMIN_PASSWORD_HASH` stores a scrypt hash rather than a plain-text password. `ADMIN_SESSION_SECRET` signs 12-hour admin sessions and must remain server-only.
+
+`ADMIN_TOKEN` remains optional for service-level access to protected admin APIs:
+
+```text
+ADMIN_TOKEN=your-secure-api-token
+```

@@ -1,6 +1,6 @@
 const state = {
   data: null,
-  token: localStorage.getItem("velouraAdminToken") || ""
+  user: null
 };
 
 const collections = {
@@ -72,14 +72,25 @@ function sortItems(items) {
 async function api(path, options = {}) {
   const response = await fetch(path, {
     ...options,
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      ...(state.token ? { "X-Admin-Token": state.token } : {}),
       ...(options.headers || {})
     }
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Request failed");
+  if (!response.ok) {
+    if (
+      response.status === 401 &&
+      path !== "/api/admin/login" &&
+      path !== "/api/admin/session"
+    ) {
+      showLogin("Your session has expired. Sign in again.");
+    }
+
+    throw new Error(data.error || "Request failed");
+  }
+
   return data;
 }
 
@@ -472,19 +483,76 @@ function setupPanels() {
   });
 }
 
-function setupToken() {
-  const input = $("[data-token-input]");
-  const button = $("[data-save-token]");
-  if (!input || !button) return;
+function setLoginStatus(message = "") {
+  const status = $("[data-login-status]");
+  if (status) status.textContent = message;
+}
 
-  input.value = state.token;
-  button.addEventListener("click", () => {
-    state.token = input.value.trim();
-    localStorage.setItem("velouraAdminToken", state.token);
-    loadData();
+function showLogin(message = "") {
+  state.data = null;
+  state.user = null;
+  $("[data-login-view]").hidden = false;
+  $("[data-admin-shell]").hidden = true;
+  setLoginStatus(message);
+}
+
+function showAdmin(user) {
+  state.user = user;
+  $("[data-login-view]").hidden = true;
+  $("[data-admin-shell]").hidden = false;
+  const identity = $("[data-admin-user]");
+  if (identity) identity.textContent = user.email || "Administrator";
+}
+
+function setupAuthentication() {
+  const form = $("[data-login-form]");
+  const logout = $("[data-logout]");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setLoginStatus("");
+
+    const submit = $("[data-login-submit]");
+    submit.disabled = true;
+    submit.textContent = "Signing In...";
+
+    try {
+      const result = await api("/api/admin/login", {
+        method: "POST",
+        body: JSON.stringify(Object.fromEntries(new FormData(form).entries()))
+      });
+      form.reset();
+      showAdmin(result.user);
+      await loadData();
+    } catch (error) {
+      setLoginStatus(error.message);
+    } finally {
+      submit.disabled = false;
+      submit.textContent = "Sign In";
+    }
+  });
+
+  logout.addEventListener("click", async () => {
+    try {
+      await api("/api/admin/logout", { method: "POST" });
+    } finally {
+      showLogin("You have signed out.");
+    }
   });
 }
 
-setupPanels();
-setupToken();
-loadData();
+async function initialize() {
+  localStorage.removeItem("velouraAdminToken");
+  setupPanels();
+  setupAuthentication();
+
+  try {
+    const session = await api("/api/admin/session");
+    showAdmin(session.user);
+    await loadData();
+  } catch {
+    showLogin();
+  }
+}
+
+initialize();

@@ -1,5 +1,6 @@
 const http = require("http");
 const https = require("https");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { MongoClient } = require("mongodb");
@@ -13,6 +14,9 @@ loadEnv();
 
 const preferredPort = Number(process.env.PORT || 5173);
 const adminToken = process.env.ADMIN_TOKEN || "";
+const adminEmail = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH || "";
+const adminSessionSecret = process.env.ADMIN_SESSION_SECRET || adminToken;
 const mongoUri = process.env.MONGODB_URI || "";
 const mongoDbName = process.env.MONGODB_DB || "veloura_spaces";
 const mongoCollectionName = process.env.MONGODB_COLLECTION || "site_content";
@@ -26,6 +30,8 @@ const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME || "";
 const cloudinaryApiKey = process.env.CLOUDINARY_API_KEY || "";
 const cloudinaryApiSecret = process.env.CLOUDINARY_API_SECRET || "";
 const cloudinaryFolder = process.env.CLOUDINARY_FOLDER || "veloura-spaces";
+const adminSessionCookie = "veloura_admin_session";
+const adminSessionDurationMs = 12 * 60 * 60 * 1000;
 
 let mongoClient = null;
 let mongoCollection = null;
@@ -177,10 +183,11 @@ function publicData(data) {
   return site;
 }
 
-function sendJson(res, status, payload) {
+function sendJson(res, status, payload, extraHeaders = {}) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
-    "Cache-Control": "no-store"
+    "Cache-Control": "no-store",
+    ...extraHeaders
   });
   res.end(JSON.stringify(payload));
 }
@@ -292,6 +299,84 @@ function cleanString(value) {
 function cleanNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function safeEqual(left, right) {
+  const first = Buffer.from(String(left || ""));
+  const second = Buffer.from(String(right || ""));
+
+  if (first.length !== second.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(first, second);
+}
+
+function adminLoginConfigured() {
+  return Boolean(adminEmail && adminPasswordHash && adminSessionSecret);
+}
+
+function passwordMatches(password) {
+  const [algorithm, salt, expectedHash] = adminPasswordHash.split("$");
+  if (algorithm !== "scrypt" || !salt || !expectedHash) return false;
+
+  const calculatedHash = crypto.scryptSync(String(password || ""), salt, 64).toString("hex");
+  return safeEqual(calculatedHash, expectedHash);
+}
+
+function sessionSignature(payload) {
+  return crypto.createHmac("sha256", adminSessionSecret).update(payload).digest("base64url");
+}
+
+function createAdminSession() {
+  const payload = Buffer.from(
+    JSON.stringify({
+      email: adminEmail,
+      expiresAt: Date.now() + adminSessionDurationMs
+    })
+  ).toString("base64url");
+
+  return `${payload}.${sessionSignature(payload)}`;
+}
+
+function cookieValue(req, name) {
+  const source = String(req.headers.cookie || "");
+  const entry = source
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`));
+
+  return entry ? entry.slice(name.length + 1) : "";
+}
+
+function sessionIsValid(req) {
+  if (!adminLoginConfigured()) return false;
+
+  const [payload, signature] = cookieValue(req, adminSessionCookie).split(".");
+  if (!payload || !signature || !safeEqual(signature, sessionSignature(payload))) return false;
+
+  try {
+    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return session.email === adminEmail && Number(session.expiresAt) > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+function sessionCookieHeader(req, value, maxAgeSeconds) {
+  const attributes = [
+    `${adminSessionCookie}=${value}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Strict",
+    `Max-Age=${maxAgeSeconds}`
+  ];
+
+  if (req.headers["x-forwarded-proto"] === "https" || req.socket?.encrypted || process.env.VERCEL) {
+    attributes.splice(3, 0, "Secure");
+  }
+
+  return attributes.join("; ");
 }
 
 function escapeHtml(value) {
@@ -551,8 +636,8 @@ function itemPayload(collection, body, existing = {}) {
 }
 
 function adminAllowed(req) {
-  if (!adminToken) return true;
-  return req.headers["x-admin-token"] === adminToken;
+  if (!adminToken && !adminLoginConfigured()) return true;
+  return (adminToken && safeEqual(req.headers["x-admin-token"], adminToken)) || sessionIsValid(req);
 }
 
 async function handleApi(req, res, parsed) {
@@ -629,8 +714,49 @@ async function handleApi(req, res, parsed) {
     return;
   }
 
+  if (method === "POST" && parsed.pathname === "/api/admin/login") {
+    if (!adminLoginConfigured()) {
+      sendError(res, 503, "Admin login is not configured");
+      return;
+    }
+
+    const body = await readBody(req);
+    const emailMatches = safeEqual(cleanString(body.email).toLowerCase(), adminEmail);
+
+    if (!emailMatches || !passwordMatches(body.password)) {
+      sendError(res, 401, "Email or password is incorrect");
+      return;
+    }
+
+    sendJson(
+      res,
+      200,
+      { authenticated: true, user: { email: adminEmail } },
+      { "Set-Cookie": sessionCookieHeader(req, createAdminSession(), adminSessionDurationMs / 1000) }
+    );
+    return;
+  }
+
+  if (method === "POST" && parsed.pathname === "/api/admin/logout") {
+    sendJson(
+      res,
+      200,
+      { authenticated: false },
+      { "Set-Cookie": sessionCookieHeader(req, "", 0) }
+    );
+    return;
+  }
+
   if (!adminAllowed(req)) {
-    sendError(res, 401, "Admin token is required");
+    sendError(res, 401, "Sign in is required");
+    return;
+  }
+
+  if (method === "GET" && parsed.pathname === "/api/admin/session") {
+    sendJson(res, 200, {
+      authenticated: true,
+      user: { email: adminEmail || "Administrator" }
+    });
     return;
   }
 

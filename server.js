@@ -345,7 +345,7 @@ function hashPassword(password) {
 }
 
 function validPassword(password) {
-  return typeof password === "string" && password.length >= 10;
+  return typeof password === "string" && password.length >= 6;
 }
 
 function passwordMatches(password, storedHash) {
@@ -1030,7 +1030,7 @@ async function handleApi(req, res, parsed) {
       return;
     }
     if (!validPassword(body.password)) {
-      sendError(res, 400, "Password must be at least 10 characters");
+      sendError(res, 400, "Password must be at least 6 characters");
       return;
     }
     if (body.confirmPassword !== undefined && body.password !== body.confirmPassword) {
@@ -1115,7 +1115,7 @@ async function handleApi(req, res, parsed) {
       return;
     }
     if (!validPassword(body.password)) {
-      sendError(res, 400, "Password must be at least 10 characters");
+      sendError(res, 400, "Password must be at least 6 characters");
       return;
     }
     if (body.confirmPassword !== undefined && body.password !== body.confirmPassword) {
@@ -1203,7 +1203,7 @@ async function handleApi(req, res, parsed) {
         return;
       }
       if (!validPassword(body.newPassword)) {
-        sendError(res, 400, "New password must be at least 10 characters");
+        sendError(res, 400, "New password must be at least 6 characters");
         return;
       }
       if (body.confirmPassword !== undefined && body.newPassword !== body.confirmPassword) {

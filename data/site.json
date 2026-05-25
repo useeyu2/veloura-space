@@ -1,0 +1,179 @@
+{
+  "updatedAt": "2026-05-24T16:36:25.378Z",
+  "settings": {
+    "brandName": "Veloura Spaces",
+    "heroEyebrow": "Luxury construction and interior design",
+    "heroTitle": "Veloura Spaces",
+    "heroCopy": "Premium construction, bespoke interior architecture, and disciplined project delivery for high-value residential and commercial spaces.",
+    "heroPrimaryCta": "Book Consultation",
+    "heroSecondaryCta": "View Case Studies",
+    "visionEyebrow": "The Vision",
+    "visionTitle": "Craft, capital, and construction discipline in one studio.",
+    "visionCopy": "Veloura Spaces aligns concept, procurement, construction, and styling so each decision serves the architecture, the budget, and the way the space will actually be used.",
+    "servicesTitle": "Integrated services for premium spaces.",
+    "servicesCopy": "Choose a single service or appoint us to lead the full journey from first concept through construction completion.",
+    "projectsTitle": "A visual directory of completed environments.",
+    "projectsCopy": "Explore selected residential, commercial, and hospitality work shaped with restraint, precision, and material depth.",
+    "testimonialsTitle": "Trusted by clients who need taste and execution.",
+    "contactTitle": "Tell us what you are building.",
+    "contactCopy": "Share the basics and we will respond with the right next step: feasibility review, design consultation, site visit, or project scoping."
+  },
+  "metrics": [
+    {
+      "id": "metric-projects",
+      "value": "42",
+      "label": "Private and commercial projects",
+      "sortOrder": 10
+    },
+    {
+      "id": "metric-years",
+      "value": "11",
+      "label": "Years of build experience",
+      "sortOrder": 20
+    },
+    {
+      "id": "metric-referrals",
+      "value": "98%",
+      "label": "Client referral rate",
+      "sortOrder": 30
+    }
+  ],
+  "services": [
+    {
+      "id": "service-residential",
+      "title": "Luxury Residential Construction",
+      "category": "Residential",
+      "description": "Ground-up homes, villa renovations, structural upgrades, extensions, and premium finishing programs.",
+      "cta": "Start a private build",
+      "sortOrder": 10,
+      "featured": true,
+      "createdAt": "2026-05-24T00:00:00.000Z",
+      "updatedAt": "2026-05-24T00:00:00.000Z"
+    },
+    {
+      "id": "service-interior",
+      "title": "Bespoke Interior Architecture",
+      "category": "Interiors",
+      "description": "Space planning, joinery, lighting, material palettes, furniture specification, procurement, and final styling.",
+      "cta": "Refine an interior",
+      "sortOrder": 20,
+      "featured": true,
+      "createdAt": "2026-05-24T00:00:00.000Z",
+      "updatedAt": "2026-05-24T00:00:00.000Z"
+    },
+    {
+      "id": "service-commercial",
+      "title": "Commercial Fit-Outs",
+      "category": "Commercial",
+      "description": "Hospitality, retail, office, and showroom environments planned for brand presence and daily operation.",
+      "cta": "Plan a fit-out",
+      "sortOrder": 30,
+      "featured": true,
+      "createdAt": "2026-05-24T00:00:00.000Z",
+      "updatedAt": "2026-05-24T00:00:00.000Z"
+    }
+  ],
+  "projects": [
+    {
+      "id": "project-harbor-house",
+      "title": "Harbor House",
+      "category": "Residential",
+      "description": "Stone, linen, and walnut composed around a slow evening routine.",
+      "scope": "Full interior architecture, procurement, and styling",
+      "location": "Private residence",
+      "image": "assets/veloura-hero.png",
+      "sortOrder": 10,
+      "featured": true,
+      "createdAt": "2026-05-24T00:00:00.000Z",
+      "updatedAt": "2026-05-24T00:00:00.000Z"
+    },
+    {
+      "id": "project-ori-salon",
+      "title": "The Ori Salon",
+      "category": "Hospitality",
+      "description": "A compact members lounge with layered seating and theatrical lighting.",
+      "scope": "Commercial fit-out and custom furniture direction",
+      "location": "Hospitality lounge",
+      "image": "assets/project-ori-salon.png",
+      "sortOrder": 20,
+      "featured": true,
+      "createdAt": "2026-05-24T00:00:00.000Z",
+      "updatedAt": "2026-05-24T00:00:00.000Z"
+    },
+    {
+      "id": "project-atelier-42",
+      "title": "Atelier 42",
+      "category": "Workspace",
+      "description": "A quieter office language for focused work, hosting, and material review.",
+      "scope": "Workspace planning, materials, lighting, and installation",
+      "location": "Private studio",
+      "image": "assets/project-atelier-42.png",
+      "sortOrder": 30,
+      "featured": true,
+      "createdAt": "2026-05-24T00:00:00.000Z",
+      "updatedAt": "2026-05-24T00:00:00.000Z"
+    },
+    {
+      "id": "project-crescent-villa",
+      "title": "Crescent Villa",
+      "category": "Residential",
+      "description": "A limestone and timber residence arranged around water, gardens, and evening light.",
+      "scope": "Ground-up construction, facade detailing, and landscape interface",
+      "location": "Private residence",
+      "image": "assets/project-crescent-villa.png",
+      "sortOrder": 40,
+      "featured": true,
+      "createdAt": "2026-05-24T00:00:00.000Z",
+      "updatedAt": "2026-05-24T00:00:00.000Z"
+    },
+    {
+      "id": "project-aurelia-court",
+      "title": "Aurelia Court",
+      "category": "Hospitality",
+      "description": "A boutique arrival experience defined by travertine, bronze, and warm ceremonial light.",
+      "scope": "Lobby interiors, custom reception desk, and material procurement",
+      "location": "Boutique hotel",
+      "image": "assets/project-aurelia-court.png",
+      "sortOrder": 50,
+      "featured": true,
+      "createdAt": "2026-05-24T00:00:00.000Z",
+      "updatedAt": "2026-05-24T00:00:00.000Z"
+    },
+    {
+      "id": "project-meridian-office",
+      "title": "Meridian House Office",
+      "category": "Workspace",
+      "description": "An executive studio and boardroom balancing private focus with confident hosting.",
+      "scope": "Executive workspace, millwork, lighting control, and furniture specification",
+      "location": "Corporate headquarters",
+      "image": "assets/project-meridian-office.png",
+      "sortOrder": 60,
+      "featured": true,
+      "createdAt": "2026-05-24T00:00:00.000Z",
+      "updatedAt": "2026-05-24T00:00:00.000Z"
+    }
+  ],
+  "testimonials": [
+    {
+      "id": "testimonial-amara",
+      "quote": "Veloura managed the build with the seriousness of a capital project and the sensitivity of a design studio. The result feels exact, not overworked.",
+      "name": "Amara C.",
+      "role": "Private residence client",
+      "sortOrder": 10,
+      "featured": true,
+      "createdAt": "2026-05-24T00:00:00.000Z",
+      "updatedAt": "2026-05-24T00:00:00.000Z"
+    },
+    {
+      "id": "testimonial-tunde",
+      "quote": "They translated our hospitality brand into a physical environment without losing operational practicality. The fit-out opened on schedule.",
+      "name": "Tunde A.",
+      "role": "Boutique hospitality founder",
+      "sortOrder": 20,
+      "featured": true,
+      "createdAt": "2026-05-24T00:00:00.000Z",
+      "updatedAt": "2026-05-24T00:00:00.000Z"
+    }
+  ],
+  "leads": []
+}

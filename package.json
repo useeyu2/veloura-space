@@ -1,0 +1,15 @@
+{
+  "name": "veloura-spaces",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A polished interior design studio web experience for Veloura Spaces.",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "check": "node --check server.js && node --check src/main.js && node --check admin/admin.js && node --check api/gateway.js"
+  },
+  "dependencies": {
+    "cloudinary": "^2.10.0",
+    "mongodb": "^7.2.0"
+  }
+}

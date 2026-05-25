@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Veloura Admin</title>
+    <link rel="stylesheet" href="/admin/admin.css" />
+    <script defer src="/admin/admin.js"></script>
+  </head>
+  <body>
+    <div class="admin-shell">
+      <header class="admin-header">
+        <a class="admin-brand" href="/">
+          <span>V</span>
+          <strong>Veloura Admin</strong>
+        </a>
+        <div class="admin-header-actions">
+          <input data-token-input type="password" placeholder="Admin token" autocomplete="off" />
+          <button type="button" data-save-token>Save Token</button>
+          <a href="/">View Site</a>
+        </div>
+      </header>
+
+      <div class="admin-layout">
+        <nav class="admin-tabs" aria-label="Admin sections">
+          <button class="is-active" type="button" data-panel-target="dashboard">Dashboard</button>
+          <button type="button" data-panel-target="settings">Site Copy</button>
+          <button type="button" data-panel-target="metrics">Metrics</button>
+          <button type="button" data-panel-target="services">Services</button>
+          <button type="button" data-panel-target="projects">Projects</button>
+          <button type="button" data-panel-target="testimonials">Testimonials</button>
+          <button type="button" data-panel-target="leads">Leads</button>
+        </nav>
+
+        <main class="admin-main">
+          <p class="admin-status" data-status role="status">Loading admin data...</p>
+
+          <section class="admin-panel is-active" data-panel="dashboard">
+            <div class="panel-heading">
+              <p>Overview</p>
+              <h1>Website control center</h1>
+            </div>
+            <div class="stat-grid" data-dashboard></div>
+          </section>
+
+          <section class="admin-panel" data-panel="settings">
+            <div class="panel-heading">
+              <p>Site Copy</p>
+              <h1>Edit hero, vision, and contact copy</h1>
+            </div>
+            <form class="editor-form wide" data-settings-form></form>
+          </section>
+
+          <section class="admin-panel" data-panel="metrics">
+            <div class="panel-heading">
+              <p>Hero Metrics</p>
+              <h1>Add, edit, or remove proof points</h1>
+            </div>
+            <div data-editor="metrics"></div>
+          </section>
+
+          <section class="admin-panel" data-panel="services">
+            <div class="panel-heading">
+              <p>Services</p>
+              <h1>Add, edit, or remove service cards</h1>
+            </div>
+            <div data-editor="services"></div>
+          </section>
+
+          <section class="admin-panel" data-panel="projects">
+            <div class="panel-heading">
+              <p>Projects</p>
+              <h1>Add, edit, or remove gallery case studies</h1>
+            </div>
+            <div data-editor="projects"></div>
+          </section>
+
+          <section class="admin-panel" data-panel="testimonials">
+            <div class="panel-heading">
+              <p>Testimonials</p>
+              <h1>Add, edit, or remove client quotes</h1>
+            </div>
+            <div data-editor="testimonials"></div>
+          </section>
+
+          <section class="admin-panel" data-panel="leads">
+            <div class="panel-heading">
+              <p>Leads</p>
+              <h1>Consultation requests</h1>
+            </div>
+            <div class="lead-list" data-leads></div>
+          </section>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

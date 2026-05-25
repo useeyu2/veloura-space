@@ -1,6 +1,8 @@
 const state = {
   data: null,
-  user: null
+  user: null,
+  admins: [],
+  invitations: []
 };
 
 const collections = {
@@ -204,7 +206,8 @@ function renderDashboard() {
     ["Services", state.data.services?.length || 0],
     ["Projects", state.data.projects?.length || 0],
     ["Testimonials", state.data.testimonials?.length || 0],
-    ["Leads", state.data.leads?.length || 0]
+    ["Leads", state.data.leads?.length || 0],
+    ["Administrators", state.admins.filter((admin) => admin.status === "active").length]
   ];
 
   dashboard.replaceChildren();
@@ -455,16 +458,170 @@ function renderLeads() {
   });
 }
 
+function renderAccount() {
+  const form = $("[data-account-form]");
+  if (!form || !state.user) return;
+
+  form.elements.fullName.value = state.user.fullName || "";
+  form.elements.email.value = state.user.email || "";
+  form.elements.phone.value = state.user.phone || "";
+  form.elements.currentPassword.value = "";
+  form.elements.newPassword.value = "";
+  form.elements.confirmPassword.value = "";
+
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    if (form.elements.newPassword.value !== form.elements.confirmPassword.value) {
+      setStatus("New password confirmation does not match.", "error");
+      return;
+    }
+    try {
+      const result = await api("/api/admin/account", {
+        method: "PUT",
+        body: JSON.stringify(Object.fromEntries(new FormData(form).entries()))
+      });
+      state.user = result.user;
+      showAdmin(state.user);
+      renderAccount();
+      setStatus("Account settings saved.");
+    } catch (error) {
+      setStatus(error.message, "error");
+    }
+  };
+}
+
+function formatDate(value) {
+  return value ? new Date(value).toLocaleDateString() : "";
+}
+
+function renderAdmins() {
+  const adminList = $("[data-admin-list]");
+  const invitationList = $("[data-invitation-list]");
+  if (!adminList || !invitationList) return;
+
+  adminList.replaceChildren();
+  state.admins.forEach((admin) => {
+    const row = document.createElement("article");
+    row.className = "admin-row";
+
+    const copy = document.createElement("div");
+    const name = document.createElement("h3");
+    name.textContent = admin.fullName || admin.email;
+    const contact = document.createElement("p");
+    contact.textContent = `${admin.email}${admin.phone ? ` | ${admin.phone}` : ""}`;
+    const badge = document.createElement("span");
+    badge.className = `status-badge${admin.status === "disabled" ? " disabled" : ""}`;
+    badge.textContent = admin.status === "disabled" ? "Disabled" : admin.role || "Admin";
+    copy.append(name, contact, badge);
+    row.append(copy);
+
+    if (admin.id !== state.user?.id && admin.status === "active") {
+      const actions = document.createElement("div");
+      actions.className = "item-actions";
+      const disable = document.createElement("button");
+      disable.type = "button";
+      disable.className = "secondary";
+      disable.textContent = "Deactivate";
+      disable.addEventListener("click", async () => {
+        if (!confirm(`Deactivate access for ${admin.fullName || admin.email}?`)) return;
+        try {
+          await api(`/api/admin/admins/${admin.id}`, { method: "DELETE" });
+          await loadAdmins();
+          renderDashboard();
+          setStatus("Administrator deactivated.");
+        } catch (error) {
+          setStatus(error.message, "error");
+        }
+      });
+      actions.append(disable);
+      row.append(actions);
+    }
+    adminList.append(row);
+  });
+
+  invitationList.replaceChildren();
+  if (!state.invitations.length) {
+    const empty = document.createElement("p");
+    empty.className = "form-note";
+    empty.textContent = "No pending invitations.";
+    invitationList.append(empty);
+  }
+
+  state.invitations.forEach((invitation) => {
+    const row = document.createElement("article");
+    row.className = "admin-row";
+    const copy = document.createElement("div");
+    const email = document.createElement("h3");
+    email.textContent = invitation.email;
+    const expiry = document.createElement("p");
+    expiry.textContent = `Expires ${formatDate(invitation.expiresAt)}`;
+    copy.append(email, expiry);
+    row.append(copy);
+    invitationList.append(row);
+  });
+}
+
+async function loadAdmins() {
+  const result = await api("/api/admin/admins");
+  state.admins = result.admins || [];
+  state.invitations = result.invitations || [];
+  renderAdmins();
+}
+
+function setupInvitationForm() {
+  const form = $("[data-invite-form]");
+  const result = $("[data-invitation-result]");
+  if (!form || !result) return;
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    result.hidden = true;
+    try {
+      const response = await api("/api/admin/admins/invitations", {
+        method: "POST",
+        body: JSON.stringify(Object.fromEntries(new FormData(form).entries()))
+      });
+      form.reset();
+      result.replaceChildren();
+      const message = document.createElement("p");
+      message.textContent = response.delivery?.sent
+        ? "Invitation email sent. You can also share this secure sign-up link."
+        : "Invitation created. Share this secure sign-up link directly.";
+      const link = document.createElement("input");
+      link.type = "text";
+      link.readOnly = true;
+      link.value = response.signupUrl;
+      const copy = document.createElement("button");
+      copy.type = "button";
+      copy.textContent = "Copy Link";
+      copy.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(response.signupUrl);
+        copy.textContent = "Copied";
+      });
+      result.append(message, link, copy);
+      result.hidden = false;
+      await loadAdmins();
+      renderDashboard();
+      setStatus("Administrator invitation created.");
+    } catch (error) {
+      setStatus(error.message, "error");
+    }
+  });
+}
+
 function renderAll() {
   renderDashboard();
+  renderAccount();
   renderSettings();
   Object.keys(collections).forEach(renderCollection);
   renderLeads();
+  renderAdmins();
 }
 
 async function loadData() {
   try {
-    state.data = await api("/api/admin/data");
+    const [data] = await Promise.all([api("/api/admin/data"), loadAdmins()]);
+    state.data = data;
     renderAll();
     setStatus("Admin data loaded.");
   } catch (error) {
@@ -483,17 +640,26 @@ function setupPanels() {
   });
 }
 
-function setLoginStatus(message = "") {
-  const status = $("[data-login-status]");
+function setAuthStatus(kind, message = "") {
+  const status = $(`[data-${kind}-status]`);
   if (status) status.textContent = message;
+}
+
+function showAuthForm(kind) {
+  $$("[data-auth-form]").forEach((form) => {
+    form.hidden = form.dataset.authForm !== kind;
+  });
 }
 
 function showLogin(message = "") {
   state.data = null;
   state.user = null;
+  state.admins = [];
+  state.invitations = [];
   $("[data-login-view]").hidden = false;
   $("[data-admin-shell]").hidden = true;
-  setLoginStatus(message);
+  showAuthForm("login");
+  setAuthStatus("login", message);
 }
 
 function showAdmin(user) {
@@ -501,16 +667,26 @@ function showAdmin(user) {
   $("[data-login-view]").hidden = true;
   $("[data-admin-shell]").hidden = false;
   const identity = $("[data-admin-user]");
-  if (identity) identity.textContent = user.email || "Administrator";
+  if (identity) identity.textContent = user.fullName || user.email || "Administrator";
 }
 
 function setupAuthentication() {
-  const form = $("[data-login-form]");
+  const loginForm = $('[data-auth-form="login"]');
+  const signupForm = $('[data-auth-form="signup"]');
+  const forgotForm = $('[data-auth-form="forgot"]');
+  const resetForm = $('[data-auth-form="reset"]');
   const logout = $("[data-logout]");
 
-  form.addEventListener("submit", async (event) => {
+  $$("[data-auth-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      showAuthForm(button.dataset.authTarget);
+      setAuthStatus(button.dataset.authTarget, "");
+    });
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    setLoginStatus("");
+    setAuthStatus("login", "");
 
     const submit = $("[data-login-submit]");
     submit.disabled = true;
@@ -519,16 +695,73 @@ function setupAuthentication() {
     try {
       const result = await api("/api/admin/login", {
         method: "POST",
-        body: JSON.stringify(Object.fromEntries(new FormData(form).entries()))
+        body: JSON.stringify(Object.fromEntries(new FormData(loginForm).entries()))
       });
-      form.reset();
+      loginForm.reset();
       showAdmin(result.user);
       await loadData();
     } catch (error) {
-      setLoginStatus(error.message);
+      setAuthStatus("login", error.message);
     } finally {
       submit.disabled = false;
       submit.textContent = "Sign In";
+    }
+  });
+
+  signupForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setAuthStatus("signup", "");
+    if (signupForm.elements.password.value !== signupForm.elements.confirmPassword.value) {
+      setAuthStatus("signup", "Password confirmation does not match.");
+      return;
+    }
+    try {
+      const result = await api("/api/admin/signup", {
+        method: "POST",
+        body: JSON.stringify(Object.fromEntries(new FormData(signupForm).entries()))
+      });
+      signupForm.reset();
+      history.replaceState({}, "", "/admin/");
+      showAdmin(result.user);
+      await loadData();
+    } catch (error) {
+      setAuthStatus("signup", error.message);
+    }
+  });
+
+  forgotForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setAuthStatus("forgot", "");
+    try {
+      const result = await api("/api/admin/forgot-password", {
+        method: "POST",
+        body: JSON.stringify(Object.fromEntries(new FormData(forgotForm).entries()))
+      });
+      forgotForm.reset();
+      setAuthStatus("forgot", result.message);
+    } catch (error) {
+      setAuthStatus("forgot", error.message);
+    }
+  });
+
+  resetForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setAuthStatus("reset", "");
+    if (resetForm.elements.password.value !== resetForm.elements.confirmPassword.value) {
+      setAuthStatus("reset", "Password confirmation does not match.");
+      return;
+    }
+    try {
+      const result = await api("/api/admin/reset-password", {
+        method: "POST",
+        body: JSON.stringify(Object.fromEntries(new FormData(resetForm).entries()))
+      });
+      resetForm.reset();
+      history.replaceState({}, "", "/admin/");
+      showAdmin(result.user);
+      await loadData();
+    } catch (error) {
+      setAuthStatus("reset", error.message);
     }
   });
 
@@ -545,6 +778,7 @@ async function initialize() {
   localStorage.removeItem("velouraAdminToken");
   setupPanels();
   setupAuthentication();
+  setupInvitationForm();
 
   try {
     const session = await api("/api/admin/session");
@@ -552,6 +786,18 @@ async function initialize() {
     await loadData();
   } catch {
     showLogin();
+    const params = new URLSearchParams(window.location.search);
+    const invite = params.get("invite");
+    const reset = params.get("reset");
+    if (invite) {
+      const token = $('[data-auth-form="signup"] [name="token"]');
+      token.value = invite;
+      showAuthForm("signup");
+    } else if (reset) {
+      const token = $('[data-auth-form="reset"] [name="token"]');
+      token.value = reset;
+      showAuthForm("reset");
+    }
   }
 }
 

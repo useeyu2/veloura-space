@@ -21,7 +21,7 @@
       </div>
 
       <div class="login-access">
-        <form class="login-card" data-login-form>
+        <form class="login-card auth-form" data-auth-form="login">
           <p class="login-kicker">Secure access</p>
           <h2>Sign in to admin</h2>
           <label>
@@ -34,7 +34,70 @@
           </label>
           <p class="login-status" data-login-status role="alert"></p>
           <button type="submit" data-login-submit>Sign In</button>
+          <button class="text-button" type="button" data-auth-target="forgot">Forgot password?</button>
+          <button class="text-button" type="button" data-auth-target="signup">Sign up with an invitation</button>
           <a class="login-site-link" href="/">Return to website</a>
+        </form>
+
+        <form class="login-card auth-form" data-auth-form="signup" hidden>
+          <p class="login-kicker">Administrator invitation</p>
+          <h2>Create account</h2>
+          <label>
+            <span>Full Name</span>
+            <input name="fullName" type="text" autocomplete="name" required />
+          </label>
+          <label>
+            <span>Email</span>
+            <input name="email" type="email" autocomplete="username" required />
+          </label>
+          <label>
+            <span>Phone Number</span>
+            <input name="phone" type="tel" autocomplete="tel" required />
+          </label>
+          <label>
+            <span>Password</span>
+            <input name="password" type="password" autocomplete="new-password" minlength="10" required />
+          </label>
+          <label>
+            <span>Confirm Password</span>
+            <input name="confirmPassword" type="password" autocomplete="new-password" minlength="10" required />
+          </label>
+          <label>
+            <span>Invitation Code</span>
+            <input name="token" type="text" autocomplete="off" required />
+          </label>
+          <p class="login-status" data-signup-status role="alert"></p>
+          <button type="submit">Create Admin Account</button>
+          <button class="text-button" type="button" data-auth-target="login">Back to sign in</button>
+        </form>
+
+        <form class="login-card auth-form" data-auth-form="forgot" hidden>
+          <p class="login-kicker">Password recovery</p>
+          <h2>Recover access</h2>
+          <label>
+            <span>Email</span>
+            <input name="email" type="email" autocomplete="email" required />
+          </label>
+          <p class="login-status" data-forgot-status role="status"></p>
+          <button type="submit">Send Recovery Link</button>
+          <button class="text-button" type="button" data-auth-target="login">Back to sign in</button>
+        </form>
+
+        <form class="login-card auth-form" data-auth-form="reset" hidden>
+          <p class="login-kicker">Secure recovery</p>
+          <h2>Set new password</h2>
+          <label>
+            <span>New Password</span>
+            <input name="password" type="password" autocomplete="new-password" minlength="10" required />
+          </label>
+          <label>
+            <span>Confirm New Password</span>
+            <input name="confirmPassword" type="password" autocomplete="new-password" minlength="10" required />
+          </label>
+          <input name="token" type="hidden" />
+          <p class="login-status" data-reset-status role="alert"></p>
+          <button type="submit">Reset Password</button>
+          <button class="text-button" type="button" data-auth-target="login">Back to sign in</button>
         </form>
       </div>
     </section>
@@ -55,6 +118,8 @@
       <div class="admin-layout">
         <nav class="admin-tabs" aria-label="Admin sections">
           <button class="is-active" type="button" data-panel-target="dashboard">Dashboard</button>
+          <button type="button" data-panel-target="account">My Account</button>
+          <button type="button" data-panel-target="admins">Administrators</button>
           <button type="button" data-panel-target="settings">Site Copy</button>
           <button type="button" data-panel-target="metrics">Metrics</button>
           <button type="button" data-panel-target="services">Services</button>
@@ -72,6 +137,77 @@
               <h1>Website control center</h1>
             </div>
             <div class="stat-grid" data-dashboard></div>
+          </section>
+
+          <section class="admin-panel" data-panel="account">
+            <div class="panel-heading">
+              <p>Settings</p>
+              <h1>My account</h1>
+            </div>
+            <form class="editor-form account-form" data-account-form>
+              <label>
+                <span>Full Name</span>
+                <input name="fullName" type="text" autocomplete="name" required />
+              </label>
+              <label>
+                <span>Email</span>
+                <input name="email" type="email" autocomplete="email" required />
+              </label>
+              <label>
+                <span>Phone Number</span>
+                <input name="phone" type="tel" autocomplete="tel" required />
+              </label>
+              <div class="form-divider">
+                <h2>Change password</h2>
+                <p>Leave password fields empty to keep your current password.</p>
+              </div>
+              <label>
+                <span>Current Password</span>
+                <input name="currentPassword" type="password" autocomplete="current-password" />
+              </label>
+              <label>
+                <span>New Password</span>
+                <input name="newPassword" type="password" minlength="10" autocomplete="new-password" />
+              </label>
+              <label>
+                <span>Confirm New Password</span>
+                <input name="confirmPassword" type="password" minlength="10" autocomplete="new-password" />
+              </label>
+              <div class="form-actions">
+                <button type="submit">Save Account</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="admin-panel" data-panel="admins">
+            <div class="panel-heading">
+              <p>Access</p>
+              <h1>Administrators</h1>
+            </div>
+            <div class="admin-manager">
+              <form class="editor-form invite-form" data-invite-form>
+                <h2>Invite an administrator</h2>
+                <p class="form-note">An invited administrator signs up with their full name, phone number, email, and password.</p>
+                <label>
+                  <span>Email</span>
+                  <input name="email" type="email" autocomplete="email" required />
+                </label>
+                <div class="form-actions">
+                  <button type="submit">Create Invitation</button>
+                </div>
+                <div class="invitation-result" data-invitation-result hidden></div>
+              </form>
+              <div class="admin-directory">
+                <section>
+                  <h2>Admin accounts</h2>
+                  <div class="admin-list" data-admin-list></div>
+                </section>
+                <section>
+                  <h2>Pending invitations</h2>
+                  <div class="admin-list" data-invitation-list></div>
+                </section>
+              </div>
+            </div>
           </section>
 
           <section class="admin-panel" data-panel="settings">

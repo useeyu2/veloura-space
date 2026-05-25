@@ -17,9 +17,16 @@ const adminToken = process.env.ADMIN_TOKEN || "";
 const adminEmail = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
 const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH || "";
 const adminSessionSecret = process.env.ADMIN_SESSION_SECRET || adminToken;
+const adminFullName = process.env.ADMIN_FULL_NAME || "Primary Administrator";
+const adminPhone = process.env.ADMIN_PHONE || "";
+const adminAppUrl = String(process.env.ADMIN_APP_URL || "").replace(/\/+$/, "");
 const mongoUri = process.env.MONGODB_URI || "";
 const mongoDbName = process.env.MONGODB_DB || "veloura_spaces";
 const mongoCollectionName = process.env.MONGODB_COLLECTION || "site_content";
+const mongoAdminCollectionName =
+  process.env.MONGODB_ADMIN_COLLECTION || `${mongoCollectionName}_admins`;
+const mongoAdminTokenCollectionName =
+  process.env.MONGODB_ADMIN_TOKEN_COLLECTION || `${mongoCollectionName}_admin_tokens`;
 const allowJsonFallback = process.env.ALLOW_JSON_FALLBACK === "true";
 const brevoApiKey = process.env.BREVO_API_KEY || "";
 const brevoSenderEmail = process.env.BREVO_SENDER_EMAIL || "";
@@ -32,9 +39,15 @@ const cloudinaryApiSecret = process.env.CLOUDINARY_API_SECRET || "";
 const cloudinaryFolder = process.env.CLOUDINARY_FOLDER || "veloura-spaces";
 const adminSessionCookie = "veloura_admin_session";
 const adminSessionDurationMs = 12 * 60 * 60 * 1000;
+const adminInviteDurationMs = 7 * 24 * 60 * 60 * 1000;
+const adminResetDurationMs = 60 * 60 * 1000;
 
 let mongoClient = null;
 let mongoCollection = null;
+let mongoAdminCollection = null;
+let mongoAdminTokenCollection = null;
+let memoryAdmins = [];
+let memoryAdminTokens = [];
 let storageMode = "json";
 let storageReady = false;
 let storageInitialization = null;
@@ -103,6 +116,7 @@ function stripMongoFields(document) {
 
 async function initStorage() {
   if (!mongoUri) {
+    await ensureBootstrapAdmin();
     storageReady = true;
     console.log("Storage mode: local JSON");
     return;
@@ -116,7 +130,13 @@ async function initStorage() {
 
     const database = mongoClient.db(mongoDbName);
     mongoCollection = database.collection(mongoCollectionName);
+    mongoAdminCollection = database.collection(mongoAdminCollectionName);
+    mongoAdminTokenCollection = database.collection(mongoAdminTokenCollectionName);
     await mongoCollection.createIndex({ key: 1 }, { unique: true });
+    await mongoAdminCollection.createIndex({ id: 1 }, { unique: true });
+    await mongoAdminCollection.createIndex({ email: 1 }, { unique: true });
+    await mongoAdminTokenCollection.createIndex({ tokenHash: 1 }, { unique: true });
+    await mongoAdminTokenCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
     const current = await mongoCollection.findOne({ key: "current" });
     if (!current) {
@@ -127,12 +147,15 @@ async function initStorage() {
       );
     }
 
+    await ensureBootstrapAdmin();
     storageMode = "mongodb";
     storageReady = true;
     console.log(`Storage mode: MongoDB database "${mongoDbName}" collection "${mongoCollectionName}"`);
   } catch (error) {
     mongoClient = null;
     mongoCollection = null;
+    mongoAdminCollection = null;
+    mongoAdminTokenCollection = null;
     storageMode = "json";
 
     if (allowJsonFallback) {
@@ -312,26 +335,185 @@ function safeEqual(left, right) {
   return crypto.timingSafeEqual(first, second);
 }
 
-function adminLoginConfigured() {
+function adminBootstrapConfigured() {
   return Boolean(adminEmail && adminPasswordHash && adminSessionSecret);
 }
 
-function passwordMatches(password) {
-  const [algorithm, salt, expectedHash] = adminPasswordHash.split("$");
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  return `scrypt$${salt}$${crypto.scryptSync(String(password), salt, 64).toString("hex")}`;
+}
+
+function validPassword(password) {
+  return typeof password === "string" && password.length >= 10;
+}
+
+function passwordMatches(password, storedHash) {
+  const [algorithm, salt, expectedHash] = String(storedHash || "").split("$");
   if (algorithm !== "scrypt" || !salt || !expectedHash) return false;
 
   const calculatedHash = crypto.scryptSync(String(password || ""), salt, 64).toString("hex");
   return safeEqual(calculatedHash, expectedHash);
 }
 
+function normalizeEmail(value) {
+  return cleanString(value).toLowerCase();
+}
+
+function validEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function publicAdmin(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    fullName: user.fullName,
+    email: user.email,
+    phone: user.phone || "",
+    role: user.role || "admin",
+    status: user.status || "active",
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    lastLoginAt: user.lastLoginAt || null
+  };
+}
+
+async function findAdminByEmail(email) {
+  const normalized = normalizeEmail(email);
+  if (mongoAdminCollection) return mongoAdminCollection.findOne({ email: normalized });
+  return memoryAdmins.find((user) => user.email === normalized) || null;
+}
+
+async function findAdminById(id) {
+  if (mongoAdminCollection) return mongoAdminCollection.findOne({ id });
+  return memoryAdmins.find((user) => user.id === id) || null;
+}
+
+async function listAdmins() {
+  if (mongoAdminCollection) {
+    return mongoAdminCollection.find({}).sort({ createdAt: 1 }).toArray();
+  }
+  return [...memoryAdmins];
+}
+
+async function countActiveAdmins() {
+  if (mongoAdminCollection) return mongoAdminCollection.countDocuments({ status: "active" });
+  return memoryAdmins.filter((user) => user.status === "active").length;
+}
+
+async function saveAdmin(user) {
+  if (mongoAdminCollection) {
+    await mongoAdminCollection.replaceOne({ id: user.id }, user, { upsert: true });
+    return user;
+  }
+
+  const index = memoryAdmins.findIndex((candidate) => candidate.id === user.id);
+  if (index === -1) memoryAdmins.push(user);
+  else memoryAdmins[index] = user;
+  return user;
+}
+
+async function ensureBootstrapAdmin() {
+  if (!adminBootstrapConfigured()) return;
+
+  const matching = await findAdminByEmail(adminEmail);
+  if (matching || (await countActiveAdmins()) > 0) return;
+
+  const now = new Date().toISOString();
+  try {
+    await saveAdmin({
+      id: `admin-${hashToken(adminEmail).slice(0, 20)}`,
+      fullName: adminFullName,
+      email: adminEmail,
+      phone: adminPhone,
+      passwordHash: adminPasswordHash,
+      role: "owner",
+      status: "active",
+      sessionVersion: 1,
+      createdAt: now,
+      updatedAt: now,
+      lastLoginAt: null
+    });
+  } catch (error) {
+    if (error.code !== 11000 || !(await findAdminByEmail(adminEmail))) {
+      throw error;
+    }
+  }
+}
+
+function randomToken() {
+  return crypto.randomBytes(32).toString("base64url");
+}
+
+function hashToken(token) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
+}
+
+async function saveAdminToken(record) {
+  if (mongoAdminTokenCollection) {
+    await mongoAdminTokenCollection.insertOne(record);
+    return record;
+  }
+  memoryAdminTokens.push(record);
+  return record;
+}
+
+async function findValidAdminToken(token, type) {
+  const tokenHash = hashToken(token);
+  const now = new Date();
+
+  if (mongoAdminTokenCollection) {
+    return mongoAdminTokenCollection.findOne({
+      tokenHash,
+      type,
+      usedAt: null,
+      expiresAt: { $gt: now }
+    });
+  }
+
+  return (
+    memoryAdminTokens.find(
+      (record) =>
+        record.tokenHash === tokenHash &&
+        record.type === type &&
+        !record.usedAt &&
+        new Date(record.expiresAt) > now
+    ) || null
+  );
+}
+
+async function consumeAdminToken(record) {
+  const usedAt = new Date();
+  if (mongoAdminTokenCollection) {
+    await mongoAdminTokenCollection.updateOne({ tokenHash: record.tokenHash }, { $set: { usedAt } });
+    return;
+  }
+  record.usedAt = usedAt;
+}
+
+async function listPendingInvitations() {
+  const now = new Date();
+  if (mongoAdminTokenCollection) {
+    return mongoAdminTokenCollection
+      .find({ type: "invite", usedAt: null, expiresAt: { $gt: now } })
+      .sort({ createdAt: -1 })
+      .toArray();
+  }
+  return memoryAdminTokens.filter(
+    (record) => record.type === "invite" && !record.usedAt && new Date(record.expiresAt) > now
+  );
+}
+
 function sessionSignature(payload) {
   return crypto.createHmac("sha256", adminSessionSecret).update(payload).digest("base64url");
 }
 
-function createAdminSession() {
+function createAdminSession(user) {
   const payload = Buffer.from(
     JSON.stringify({
-      email: adminEmail,
+      userId: user.id,
+      sessionVersion: user.sessionVersion || 1,
       expiresAt: Date.now() + adminSessionDurationMs
     })
   ).toString("base64url");
@@ -349,17 +531,21 @@ function cookieValue(req, name) {
   return entry ? entry.slice(name.length + 1) : "";
 }
 
-function sessionIsValid(req) {
-  if (!adminLoginConfigured()) return false;
+async function sessionAdmin(req) {
+  if (!adminSessionSecret) return null;
 
   const [payload, signature] = cookieValue(req, adminSessionCookie).split(".");
-  if (!payload || !signature || !safeEqual(signature, sessionSignature(payload))) return false;
+  if (!payload || !signature || !safeEqual(signature, sessionSignature(payload))) return null;
 
   try {
     const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    return session.email === adminEmail && Number(session.expiresAt) > Date.now();
+    if (Number(session.expiresAt) <= Date.now()) return null;
+    const user = await findAdminById(session.userId);
+    if (!user || user.status !== "active") return null;
+    if (Number(user.sessionVersion || 1) !== Number(session.sessionVersion || 1)) return null;
+    return user;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -392,8 +578,82 @@ function brevoConfigured() {
   return Boolean(brevoApiKey && brevoSenderEmail && brevoToEmail);
 }
 
+function brevoSenderConfigured() {
+  return Boolean(brevoApiKey && brevoSenderEmail);
+}
+
 function cloudinaryConfigured() {
   return Boolean(cloudinaryCloudName && cloudinaryApiKey && cloudinaryApiSecret);
+}
+
+function applicationUrl(req) {
+  if (adminAppUrl) return adminAppUrl;
+  const protocol =
+    req.headers["x-forwarded-proto"] || (req.socket?.encrypted || process.env.VERCEL ? "https" : "http");
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "127.0.0.1:5173";
+  return `${protocol}://${host}`;
+}
+
+async function sendAdminEmail(to, subject, htmlContent, textContent) {
+  if (!brevoSenderConfigured()) {
+    return { sent: false, reason: "Brevo sender is not configured." };
+  }
+
+  const result = await postJson(
+    "https://api.brevo.com/v3/smtp/email",
+    { "api-key": brevoApiKey },
+    {
+      sender: { name: brevoSenderName, email: brevoSenderEmail },
+      to: [{ email: to.email, name: to.name }],
+      subject,
+      htmlContent,
+      textContent
+    }
+  );
+
+  return { sent: true, messageId: result.data.messageId || null };
+}
+
+function adminInvitationEmail(invitation, signupUrl) {
+  return {
+    subject: "Your Veloura Spaces admin invitation",
+    html: `
+      <html>
+        <body style="margin:0;background:#f4f1eb;color:#171b1d;font-family:Arial,sans-serif;">
+          <div style="max-width:600px;margin:0 auto;padding:32px;">
+            <div style="background:#fffaf2;border:1px solid #ded6c9;padding:30px;">
+              <p style="margin:0 0 10px;color:#8f4a3d;font-size:12px;font-weight:700;text-transform:uppercase;">Administrator invitation</p>
+              <h1 style="margin:0 0 16px;font-family:Georgia,serif;font-size:31px;">Create your Veloura account</h1>
+              <p style="margin:0 0 24px;color:#626d69;">You have been invited to manage website content and consultation requests.</p>
+              <a href="${escapeHtml(signupUrl)}" style="display:inline-block;padding:13px 18px;background:#23292b;color:#fffaf2;text-decoration:none;font-weight:700;">Create account</a>
+              <p style="margin:24px 0 0;color:#626d69;font-size:13px;">This invitation expires in 7 days.</p>
+            </div>
+          </div>
+        </body>
+      </html>`,
+    text: `Create your Veloura Spaces admin account:\n${signupUrl}\n\nThis invitation expires in 7 days.`
+  };
+}
+
+function passwordResetEmail(user, resetUrl) {
+  return {
+    subject: "Reset your Veloura Spaces admin password",
+    html: `
+      <html>
+        <body style="margin:0;background:#f4f1eb;color:#171b1d;font-family:Arial,sans-serif;">
+          <div style="max-width:600px;margin:0 auto;padding:32px;">
+            <div style="background:#fffaf2;border:1px solid #ded6c9;padding:30px;">
+              <p style="margin:0 0 10px;color:#8f4a3d;font-size:12px;font-weight:700;text-transform:uppercase;">Password recovery</p>
+              <h1 style="margin:0 0 16px;font-family:Georgia,serif;font-size:31px;">Reset your password</h1>
+              <p style="margin:0 0 24px;color:#626d69;">Hello ${escapeHtml(user.fullName || "Administrator")}, use this secure link to set a new password.</p>
+              <a href="${escapeHtml(resetUrl)}" style="display:inline-block;padding:13px 18px;background:#23292b;color:#fffaf2;text-decoration:none;font-weight:700;">Reset password</a>
+              <p style="margin:24px 0 0;color:#626d69;font-size:13px;">This link expires in 1 hour. If you did not request this, no action is needed.</p>
+            </div>
+          </div>
+        </body>
+      </html>`,
+    text: `Reset your Veloura Spaces admin password:\n${resetUrl}\n\nThis link expires in 1 hour.`
+  };
 }
 
 function validateDataUrl(value) {
@@ -635,9 +895,18 @@ function itemPayload(collection, body, existing = {}) {
   };
 }
 
-function adminAllowed(req) {
-  if (!adminToken && !adminLoginConfigured()) return true;
-  return (adminToken && safeEqual(req.headers["x-admin-token"], adminToken)) || sessionIsValid(req);
+function serviceTokenAllowed(req) {
+  return Boolean(adminToken && safeEqual(req.headers["x-admin-token"], adminToken));
+}
+
+async function adminAccess(req) {
+  const user = await sessionAdmin(req);
+  const serviceToken = serviceTokenAllowed(req);
+  return {
+    user,
+    serviceToken,
+    allowed: Boolean(user || serviceToken || (!adminToken && !adminSessionSecret))
+  };
 }
 
 async function handleApi(req, res, parsed) {
@@ -715,24 +984,163 @@ async function handleApi(req, res, parsed) {
   }
 
   if (method === "POST" && parsed.pathname === "/api/admin/login") {
-    if (!adminLoginConfigured()) {
+    if (!adminSessionSecret) {
       sendError(res, 503, "Admin login is not configured");
       return;
     }
 
     const body = await readBody(req);
-    const emailMatches = safeEqual(cleanString(body.email).toLowerCase(), adminEmail);
+    const user = await findAdminByEmail(body.email);
 
-    if (!emailMatches || !passwordMatches(body.password)) {
+    if (!user || user.status !== "active" || !passwordMatches(body.password, user.passwordHash)) {
       sendError(res, 401, "Email or password is incorrect");
       return;
     }
 
+    user.lastLoginAt = new Date().toISOString();
+    await saveAdmin(user);
+
     sendJson(
       res,
       200,
-      { authenticated: true, user: { email: adminEmail } },
-      { "Set-Cookie": sessionCookieHeader(req, createAdminSession(), adminSessionDurationMs / 1000) }
+      { authenticated: true, user: publicAdmin(user) },
+      { "Set-Cookie": sessionCookieHeader(req, createAdminSession(user), adminSessionDurationMs / 1000) }
+    );
+    return;
+  }
+
+  if (method === "POST" && parsed.pathname === "/api/admin/signup") {
+    if (!adminSessionSecret) {
+      sendError(res, 503, "Admin sign up is not configured");
+      return;
+    }
+
+    const body = await readBody(req);
+    const invitation = await findValidAdminToken(body.token, "invite");
+    const email = normalizeEmail(body.email);
+    const fullName = cleanString(body.fullName);
+    const phone = cleanString(body.phone);
+
+    if (!invitation || invitation.email !== email) {
+      sendError(res, 400, "This invitation is invalid or has expired");
+      return;
+    }
+    if (!fullName || !phone || !validEmail(email)) {
+      sendError(res, 400, "Full name, valid email, and phone number are required");
+      return;
+    }
+    if (!validPassword(body.password)) {
+      sendError(res, 400, "Password must be at least 10 characters");
+      return;
+    }
+    if (body.confirmPassword !== undefined && body.password !== body.confirmPassword) {
+      sendError(res, 400, "Password confirmation does not match");
+      return;
+    }
+    if (await findAdminByEmail(email)) {
+      sendError(res, 409, "An administrator account already exists for this email");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const user = {
+      id: makeId("admin"),
+      fullName,
+      email,
+      phone,
+      passwordHash: hashPassword(body.password),
+      role: "admin",
+      status: "active",
+      sessionVersion: 1,
+      invitedBy: invitation.createdBy || null,
+      createdAt: now,
+      updatedAt: now,
+      lastLoginAt: now
+    };
+    await saveAdmin(user);
+    await consumeAdminToken(invitation);
+
+    sendJson(
+      res,
+      201,
+      { authenticated: true, user: publicAdmin(user) },
+      { "Set-Cookie": sessionCookieHeader(req, createAdminSession(user), adminSessionDurationMs / 1000) }
+    );
+    return;
+  }
+
+  if (method === "POST" && parsed.pathname === "/api/admin/forgot-password") {
+    const body = await readBody(req);
+    const user = await findAdminByEmail(body.email);
+
+    if (user && user.status === "active" && adminSessionSecret) {
+      const token = randomToken();
+      await saveAdminToken({
+        id: makeId("reset"),
+        type: "reset",
+        tokenHash: hashToken(token),
+        email: user.email,
+        userId: user.id,
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + adminResetDurationMs),
+        usedAt: null
+      });
+
+      const resetUrl = `${applicationUrl(req)}/admin/?reset=${encodeURIComponent(token)}`;
+      const email = passwordResetEmail(user, resetUrl);
+      try {
+        await sendAdminEmail(
+          { name: user.fullName, email: user.email },
+          email.subject,
+          email.html,
+          email.text
+        );
+      } catch (error) {
+        console.warn(`Password recovery email failed for ${user.id}: ${error.message}`);
+      }
+    }
+
+    sendJson(res, 200, {
+      message: "If an administrator account exists for that email, a recovery link has been sent."
+    });
+    return;
+  }
+
+  if (method === "POST" && parsed.pathname === "/api/admin/reset-password") {
+    const body = await readBody(req);
+    const reset = await findValidAdminToken(body.token, "reset");
+
+    if (!reset) {
+      sendError(res, 400, "This recovery link is invalid or has expired");
+      return;
+    }
+    if (!validPassword(body.password)) {
+      sendError(res, 400, "Password must be at least 10 characters");
+      return;
+    }
+    if (body.confirmPassword !== undefined && body.password !== body.confirmPassword) {
+      sendError(res, 400, "Password confirmation does not match");
+      return;
+    }
+
+    const user = await findAdminById(reset.userId);
+    if (!user || user.status !== "active") {
+      sendError(res, 400, "This recovery link is invalid or has expired");
+      return;
+    }
+
+    user.passwordHash = hashPassword(body.password);
+    user.sessionVersion = Number(user.sessionVersion || 1) + 1;
+    user.updatedAt = new Date().toISOString();
+    user.lastLoginAt = user.updatedAt;
+    await saveAdmin(user);
+    await consumeAdminToken(reset);
+
+    sendJson(
+      res,
+      200,
+      { authenticated: true, user: publicAdmin(user) },
+      { "Set-Cookie": sessionCookieHeader(req, createAdminSession(user), adminSessionDurationMs / 1000) }
     );
     return;
   }
@@ -747,16 +1155,182 @@ async function handleApi(req, res, parsed) {
     return;
   }
 
-  if (!adminAllowed(req)) {
+  const access = await adminAccess(req);
+
+  if (!access.allowed) {
     sendError(res, 401, "Sign in is required");
     return;
   }
 
   if (method === "GET" && parsed.pathname === "/api/admin/session") {
+    if (!access.user) {
+      sendError(res, 401, "Sign in is required");
+      return;
+    }
+
     sendJson(res, 200, {
       authenticated: true,
-      user: { email: adminEmail || "Administrator" }
+      user: publicAdmin(access.user)
     });
+    return;
+  }
+
+  if (method === "PUT" && parsed.pathname === "/api/admin/account") {
+    if (!access.user) {
+      sendError(res, 403, "An administrator session is required");
+      return;
+    }
+
+    const body = await readBody(req);
+    const fullName = cleanString(body.fullName);
+    const email = normalizeEmail(body.email);
+    const phone = cleanString(body.phone);
+
+    if (!fullName || !phone || !validEmail(email)) {
+      sendError(res, 400, "Full name, valid email, and phone number are required");
+      return;
+    }
+
+    const conflicting = await findAdminByEmail(email);
+    if (conflicting && conflicting.id !== access.user.id) {
+      sendError(res, 409, "That email is already assigned to another administrator");
+      return;
+    }
+
+    if (body.newPassword) {
+      if (!passwordMatches(body.currentPassword, access.user.passwordHash)) {
+        sendError(res, 400, "Current password is incorrect");
+        return;
+      }
+      if (!validPassword(body.newPassword)) {
+        sendError(res, 400, "New password must be at least 10 characters");
+        return;
+      }
+      if (body.confirmPassword !== undefined && body.newPassword !== body.confirmPassword) {
+        sendError(res, 400, "New password confirmation does not match");
+        return;
+      }
+      access.user.passwordHash = hashPassword(body.newPassword);
+      access.user.sessionVersion = Number(access.user.sessionVersion || 1) + 1;
+    }
+
+    access.user.fullName = fullName;
+    access.user.email = email;
+    access.user.phone = phone;
+    access.user.updatedAt = new Date().toISOString();
+    await saveAdmin(access.user);
+
+    sendJson(
+      res,
+      200,
+      { user: publicAdmin(access.user) },
+      { "Set-Cookie": sessionCookieHeader(req, createAdminSession(access.user), adminSessionDurationMs / 1000) }
+    );
+    return;
+  }
+
+  if (method === "GET" && parsed.pathname === "/api/admin/admins") {
+    if (!access.user) {
+      sendError(res, 403, "An administrator session is required");
+      return;
+    }
+
+    const users = await listAdmins();
+    const invitations = await listPendingInvitations();
+    sendJson(res, 200, {
+      admins: users.map(publicAdmin),
+      invitations: invitations.map((invitation) => ({
+        id: invitation.id,
+        email: invitation.email,
+        createdAt: invitation.createdAt,
+        expiresAt: invitation.expiresAt
+      }))
+    });
+    return;
+  }
+
+  if (method === "POST" && parsed.pathname === "/api/admin/admins/invitations") {
+    if (!access.user) {
+      sendError(res, 403, "An administrator session is required");
+      return;
+    }
+
+    const body = await readBody(req);
+    const email = normalizeEmail(body.email);
+    if (!validEmail(email)) {
+      sendError(res, 400, "Enter a valid email address");
+      return;
+    }
+    if (await findAdminByEmail(email)) {
+      sendError(res, 409, "This email already has an administrator account");
+      return;
+    }
+
+    const token = randomToken();
+    const invitation = {
+      id: makeId("invite"),
+      type: "invite",
+      tokenHash: hashToken(token),
+      email,
+      createdBy: access.user.id,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + adminInviteDurationMs),
+      usedAt: null
+    };
+    await saveAdminToken(invitation);
+
+    const signupUrl = `${applicationUrl(req)}/admin/?invite=${encodeURIComponent(token)}`;
+    const invitationEmail = adminInvitationEmail(invitation, signupUrl);
+    let delivery;
+    try {
+      delivery = await sendAdminEmail(
+        { name: email, email },
+        invitationEmail.subject,
+        invitationEmail.html,
+        invitationEmail.text
+      );
+    } catch (error) {
+      delivery = { sent: false, reason: error.message };
+    }
+
+    sendJson(res, 201, {
+      invitation: {
+        id: invitation.id,
+        email: invitation.email,
+        createdAt: invitation.createdAt,
+        expiresAt: invitation.expiresAt
+      },
+      signupUrl,
+      delivery
+    });
+    return;
+  }
+
+  if (method === "DELETE" && segments[2] === "admins" && segments.length === 4) {
+    if (!access.user) {
+      sendError(res, 403, "An administrator session is required");
+      return;
+    }
+    if (segments[3] === access.user.id) {
+      sendError(res, 400, "You cannot deactivate your own account");
+      return;
+    }
+
+    const user = await findAdminById(segments[3]);
+    if (!user) {
+      sendError(res, 404, "Administrator not found");
+      return;
+    }
+    if (user.status === "active" && (await countActiveAdmins()) <= 1) {
+      sendError(res, 400, "At least one active administrator is required");
+      return;
+    }
+
+    user.status = "disabled";
+    user.sessionVersion = Number(user.sessionVersion || 1) + 1;
+    user.updatedAt = new Date().toISOString();
+    await saveAdmin(user);
+    sendJson(res, 200, { user: publicAdmin(user) });
     return;
   }
 
